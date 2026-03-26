@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>欧谱曼迪产品配置系统</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f7fa;
+            color: #1f2d3d;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            background: linear-gradient(135deg, #1a56db, #1e429f);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        h1 { margin: 0 0 5px; font-size: 1.8rem; }
+        .sub { opacity: 0.9; font-size: 0.9rem; }
+        .control-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        .product-selector {
+            margin-bottom: 20px;
+        }
+        label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 8px;
+        }
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d0d5dd;
+            border-radius: 8px;
+            font-size: 1rem;
+            background: white;
+        }
+        .config-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .config-table th, .config-table td {
+            border: 1px solid #e4e7ed;
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .config-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #1f2d3d;
+        }
+        .config-table input {
+            width: 70px;
+            padding: 6px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-standard { background: #e6f7e6; color: #2c6e2c; }
+        .badge-optional { background: #fff3e0; color: #b45f06; }
+        button {
+            background: #1a56db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background: #0e3f9e; }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #6c757d;
+        }
+        .error {
+            background: #fee2e2;
+            color: #b91c1c;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        @media (max-width: 768px) {
+            .config-table th, .config-table td {
+                padding: 8px;
+                font-size: 0.85rem;
+            }
+            .config-table input { width: 55px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>欧谱曼迪产品配置系统</h1>
+        <div class="sub">在线选择产品及选配件，一键导出Excel配置清单</div>
+    </header>
+
+    <div class="control-panel">
+        <div class="product-selector">
+            <label>选择产品系列：</label>
+            <select id="productSelect"></select>
+        </div>
+
+        <div id="configArea">
+            <div class="loading">加载配置中...</div>
+        </div>
+
+        <div style="margin-top: 20px; text-align: right;">
+            <button id="exportBtn">📎 导出当前配置为Excel</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<script>
+    // ========== 配置区 ==========
+    const API_URL = 'https://script.google.com/macros/s/AKfycbyhFM_qSBTGe3VbHQV74U4gxCEI657TLV6YLGBbYyi5qmzExDTtRZaQpdMJeTsJ8WM/exec';  // 替换成你的API地址
+    // ===========================
+
+    let products = [];      // 存储产品列表
+    let partsMap = {};      // 配件ID -> 配件详情
+    let configs = [];       // 所有配置关系
+    let currentProductCode = '';
+    let currentConfigItems = [];  // 当前显示并调整后的配置项
+
+    // 页面加载
+    window.onload = async () => {
+        await loadData();
+        if (products.length > 0) {
+            renderProductSelect();
+            // 默认选择第一个产品
+            currentProductCode = products[0].产品代码;
+            document.getElementById('productSelect').value = currentProductCode;
+            await renderConfig();
+        }
+    };
+
+    // 加载数据
+    async function loadData() {
+        try {
+            const response = await fetch(API_URL);
+            const data = await response.json();
+            // 构建配件映射
+            data.parts.forEach(part => {
+                partsMap[part.配件ID] = part;
+            });
+            products = data.products;
+            configs = data.configs;
+        } catch (error) {
+            console.error('数据加载失败：', error);
+            document.getElementById('configArea').innerHTML = `<div class="error">数据加载失败，请检查API地址或网络，或刷新页面重试。</div>`;
+        }
+    }
+
+    // 渲染产品下拉框
+    function renderProductSelect() {
+        const select = document.getElementById('productSelect');
+        select.innerHTML = '';
+        products.forEach(p => {
+            const option = document.createElement('option');
+            option.value = p.产品代码;
+            option.textContent = `${p.产品代码} - ${p.产品名称}`;
+            select.appendChild(option);
+        });
+        select.addEventListener('change', async (e) => {
+            currentProductCode = e.target.value;
+            await renderConfig();
+        });
+    }
+
+    // 渲染当前产品的配置表
+    async function renderConfig() {
+        if (!currentProductCode) return;
+
+        // 筛选该产品的配置
+        const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
+        if (productConfigs.length === 0) {
+            document.getElementById('configArea').innerHTML = '<div class="loading">该产品暂无配置信息，请联系管理员。</div>';
+            return;
+        }
+
+        // 转换为表格项，附带配件详细信息
+        const items = [];
+        for (let cfg of productConfigs) {
+            const part = partsMap[cfg.配件ID];
+            if (!part) continue;
+            items.push({
+                配件ID: cfg.配件ID,
+                型号: part.型号,
+                名称: part.名称,
+                规格参数: part.规格参数 || '',
+                类型: cfg.类型,
+                默认数量: Number(cfg.默认数量) || 1,
+                可调数量: cfg.可调数量 === '是' || cfg.可调数量 === true,
+                当前数量: Number(cfg.默认数量) || 1
+            });
+        }
+
+        // 分离标配和选配
+        const standard = items.filter(i => i.类型 === '标配');
+        const optional = items.filter(i => i.类型 === '选配');
+
+        // 生成HTML表格
+        let html = `
+            <h3>标配清单</h3>
+            <table class="config-table">
+                <thead>
+                    <tr><th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>数量</th></tr>
+                </thead>
+                <tbody>
+        `;
+        standard.forEach((item, idx) => {
+            html += `
+                <tr>
+                    <td>${idx+1}</td>
+                    <td>${escapeHtml(item.型号)}</td>
+                    <td>${escapeHtml(item.名称)}</td>
+                    <td>${escapeHtml(item.规格参数)}</td>
+                    <td>${item.当前数量}</td>
+                </tr>
+            `;
+        });
+        html += `</tbody></table>`;
+
+        if (optional.length > 0) {
+            html += `<h3>选配清单（可调整数量）</h3>
+            <table class="config-table" id="optionalTable">
+                <thead>
+                    <tr><th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>数量</th></tr>
+                </thead>
+                <tbody>
+            `;
+            optional.forEach((item, idx) => {
+                html += `
+                    <tr data-part-id="${item.配件ID}">
+                        <td>${idx+1}</td>
+                        <td>${escapeHtml(item.型号)}</td>
+                        <td>${escapeHtml(item.名称)}</td>
+                        <td>${escapeHtml(item.规格参数)}</td>
+                        <td><input type="number" min="0" value="${item.当前数量}" step="1" class="qty-input" data-id="${item.配件ID}"></td>
+                    </tr>
+                `;
+            });
+            html += `</tbody></table>`;
+        }
+
+        document.getElementById('configArea').innerHTML = html;
+
+        // 绑定数量输入事件
+        if (optional.length > 0) {
+            const inputs = document.querySelectorAll('.qty-input');
+            inputs.forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const partId = e.target.dataset.id;
+                    const newQty = parseInt(e.target.value) || 0;
+                    const item = optional.find(i => i.配件ID === partId);
+                    if (item) item.当前数量 = newQty;
+                });
+            });
+        }
+
+        // 保存当前配置项，供导出使用
+        currentConfigItems = [...standard, ...optional];
+    }
+
+    // 导出Excel
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        if (!currentConfigItems.length) {
+            alert('请先选择产品');
+            return;
+        }
+        const product = products.find(p => p.产品代码 === currentProductCode);
+        const productName = product ? product.产品名称 : currentProductCode;
+
+        // 构建导出数据
+        const rows = [];
+        rows.push(['产品代码', currentProductCode]);
+        rows.push(['产品名称', productName]);
+        rows.push(['导出时间', new Date().toLocaleString()]);
+        rows.push([]);
+        rows.push(['类型', '序号', '型号', '名称', '规格参数', '数量']);
+
+        let stdIdx = 0, optIdx = 0;
+        currentConfigItems.forEach(item => {
+            const typeLabel = item.类型 === '标配' ? '标配' : '选配';
+            const idx = item.类型 === '标配' ? ++stdIdx : ++optIdx;
+            rows.push([
+                typeLabel,
+                idx,
+                item.型号,
+                item.名称,
+                item.规格参数,
+                item.当前数量
+            ]);
+        });
+
+        // 创建工作簿并导出
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '产品配置');
+        XLSX.writeFile(wb, `${currentProductCode}_配置清单.xlsx`);
+    });
+
+    // 简单的HTML转义
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+</script>
+</body>
+</html>
