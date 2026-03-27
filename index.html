@@ -199,98 +199,73 @@
 
     // 渲染当前产品的配置表
     async function renderConfig() {
-        if (!currentProductCode) return;
+    if (!currentProductCode) return;
 
-        // 筛选该产品的配置
-        const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
-        if (productConfigs.length === 0) {
-            document.getElementById('configArea').innerHTML = '<div class="loading">该产品暂无配置信息，请联系管理员。</div>';
-            return;
-        }
-
-        // 转换为表格项，附带配件详细信息
-        const items = [];
-        for (let cfg of productConfigs) {
-            const part = partsMap[cfg.配件ID];
-            if (!part) continue;
-            items.push({
-                配件ID: cfg.配件ID,
-                型号: part.型号,
-                名称: part.名称,
-                规格参数: part.规格参数 || '',
-                类型: cfg.类型,
-                默认数量: Number(cfg.默认数量) || 1,
-                可调数量: cfg.可调数量 === '是' || cfg.可调数量 === true,
-                当前数量: Number(cfg.默认数量) || 1
-            });
-        }
-
-        // 分离标配和选配
-        const standard = items.filter(i => i.类型 === '标配');
-        const optional = items.filter(i => i.类型 === '选配');
-
-        // 生成HTML表格
-        let html = `
-            <h3>标配清单</h3>
-            <table class="config-table">
-                <thead>
-                    <tr><th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>数量</th></tr>
-                </thead>
-                <tbody>
-        `;
-        standard.forEach((item, idx) => {
-            html += `
-                <tr>
-                    <td>${idx+1}</td>
-                    <td>${escapeHtml(item.型号)}</td>
-                    <td>${escapeHtml(item.名称)}</td>
-                    <td>${escapeHtml(item.规格参数)}</td>
-                    <td>${item.当前数量}</td>
-                </tr>
-            `;
-        });
-        html += `</tbody></table>`;
-
-        if (optional.length > 0) {
-            html += `<h3>选配清单（可调整数量）</h3>
-            <table class="config-table" id="optionalTable">
-                <thead>
-                    <tr><th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>数量</th></tr>
-                </thead>
-                <tbody>
-            `;
-            optional.forEach((item, idx) => {
-                html += `
-                    <tr data-part-id="${item.配件ID}">
-                        <td>${idx+1}</td>
-                        <td>${escapeHtml(item.型号)}</td>
-                        <td>${escapeHtml(item.名称)}</td>
-                        <td>${escapeHtml(item.规格参数)}</td>
-                        <td><input type="number" min="0" value="${item.当前数量}" step="1" class="qty-input" data-id="${item.配件ID}"></td>
-                    </tr>
-                `;
-            });
-            html += `</tbody></table>`;
-        }
-
-        document.getElementById('configArea').innerHTML = html;
-
-        // 绑定数量输入事件
-        if (optional.length > 0) {
-            const inputs = document.querySelectorAll('.qty-input');
-            inputs.forEach(input => {
-                input.addEventListener('change', (e) => {
-                    const partId = e.target.dataset.id;
-                    const newQty = parseInt(e.target.value) || 0;
-                    const item = optional.find(i => i.配件ID === partId);
-                    if (item) item.当前数量 = newQty;
-                });
-            });
-        }
-
-        // 保存当前配置项，供导出使用
-        currentConfigItems = [...standard, ...optional];
+    // 筛选该产品的配置（现在 configs 由后端动态生成）
+    const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
+    if (productConfigs.length === 0) {
+        document.getElementById('configArea').innerHTML = '<div class="loading">该产品暂无配置信息，请联系管理员。</div>';
+        return;
     }
+
+    // 转换为表格项，附带配件详细信息
+    const items = [];
+    for (let cfg of productConfigs) {
+        const part = partsMap[cfg.配件ID];
+        if (!part) continue;
+        items.push({
+            配件ID: cfg.配件ID,
+            型号: part.型号,
+            名称: part.名称,
+            规格参数: part.规格参数 || '',
+            类型: cfg.类型,
+            默认数量: Number(cfg.默认数量) || 1,
+            当前数量: Number(cfg.默认数量) || 1
+        });
+    }
+
+    // 不再区分标配和选配，全部显示为可调整数量
+    const allItems = items;
+
+    // 生成HTML表格
+    let html = `
+        <h3>配置清单（可修改数量）</h3>
+        <table class="config-table" id="configTable">
+            <thead>
+                <tr><th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>类型</th><th>数量</th></tr>
+            </thead>
+            <tbody>
+    `;
+    allItems.forEach((item, idx) => {
+        html += `
+            <tr data-part-id="${item.配件ID}">
+                <td>${idx+1}</td>
+                <td>${escapeHtml(item.型号)}</td>
+                <td>${escapeHtml(item.名称)}</td>
+                <td>${escapeHtml(item.规格参数)}</td>
+                <td>${item.类型}</td>
+                <td><input type="number" min="0" value="${item.当前数量}" step="1" class="qty-input" data-id="${item.配件ID}"></td>
+            </tr>
+        `;
+    });
+    html += `</tbody></table>`;
+
+    document.getElementById('configArea').innerHTML = html;
+
+    // 绑定数量输入事件
+    const inputs = document.querySelectorAll('.qty-input');
+    inputs.forEach(input => {
+        input.addEventListener('change', (e) => {
+            const partId = e.target.dataset.id;
+            const newQty = parseInt(e.target.value) || 0;
+            const item = allItems.find(i => i.配件ID === partId);
+            if (item) item.当前数量 = newQty;
+        });
+    });
+
+    // 保存当前配置项，供导出使用
+    currentConfigItems = allItems;
+}
 
     // 导出Excel
    document.getElementById('exportBtn').addEventListener('click', () => {
