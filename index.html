@@ -201,33 +201,30 @@
     async function renderConfig() {
     if (!currentProductCode) return;
 
-    // 筛选该产品的配置（现在 configs 由后端动态生成）
     const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
     if (productConfigs.length === 0) {
         document.getElementById('configArea').innerHTML = '<div class="loading">该产品暂无配置信息，请联系管理员。</div>';
         return;
     }
 
-    // 转换为表格项，附带配件详细信息
     const items = [];
     for (let cfg of productConfigs) {
         const part = partsMap[cfg.配件ID];
         if (!part) continue;
+        // 标配默认数量1，选配默认数量0
+        let defaultQty = cfg.类型 === '标配' ? 1 : 0;
         items.push({
             配件ID: cfg.配件ID,
             型号: part.型号,
             名称: part.名称,
             规格参数: part.规格参数 || '',
             类型: cfg.类型,
-            默认数量: Number(cfg.默认数量) || 1,
-            当前数量: Number(cfg.默认数量) || 1
+            默认数量: defaultQty,
+            当前数量: defaultQty
         });
     }
 
-    // 不再区分标配和选配，全部显示为可调整数量
-    const allItems = items;
-
-    // 生成HTML表格
+    // 生成表格（全部显示可调数量）
     let html = `
         <h3>配置清单（可修改数量）</h3>
         <table class="config-table" id="configTable">
@@ -236,7 +233,7 @@
             </thead>
             <tbody>
     `;
-    allItems.forEach((item, idx) => {
+    items.forEach((item, idx) => {
         html += `
             <tr data-part-id="${item.配件ID}">
                 <td>${idx+1}</td>
@@ -249,22 +246,20 @@
         `;
     });
     html += `</tbody></table>`;
-
     document.getElementById('configArea').innerHTML = html;
 
-    // 绑定数量输入事件
+    // 绑定数量变化事件
     const inputs = document.querySelectorAll('.qty-input');
     inputs.forEach(input => {
         input.addEventListener('change', (e) => {
             const partId = e.target.dataset.id;
             const newQty = parseInt(e.target.value) || 0;
-            const item = allItems.find(i => i.配件ID === partId);
+            const item = items.find(i => i.配件ID === partId);
             if (item) item.当前数量 = newQty;
         });
     });
 
-    // 保存当前配置项，供导出使用
-    currentConfigItems = allItems;
+    currentConfigItems = items;  // 保存所有项（包括数量为0的）
 }
 
     // 导出Excel
@@ -276,79 +271,44 @@
     const product = products.find(p => p.产品代码 === currentProductCode);
     const productName = product ? product.产品名称 : currentProductCode;
 
-    // 分离标配和选配（用于显示）
-    const standard = currentConfigItems.filter(i => i.类型 === '标配');
-    const optional = currentConfigItems.filter(i => i.类型 === '选配');
-    const allItems = [...standard, ...optional];
+    // 过滤出数量大于0的项
+    const nonZeroItems = currentConfigItems.filter(item => item.当前数量 > 0);
+    if (nonZeroItems.length === 0) {
+        alert('没有需要导出的项目（所有数量均为0）');
+        return;
+    }
 
-    // 计算数量和价格合计（价格暂时为0，后续可手动填）
+    // 计算合计数量和价格（价格暂为0，可后续扩展）
     let totalQty = 0;
     let totalPrice = 0;
-    allItems.forEach(item => {
+    nonZeroItems.forEach(item => {
         totalQty += item.当前数量;
-        // 如果价格列有值（比如从item.price读取），但这里没有存储价格，故合计为0
-        // 若未来增加价格字段，可在此累加
+        // 价格暂时不累加，如需增加价格字段，可在此处读取 item.价格（需先在配件库中定义）
     });
 
-    // 构建HTML内容
+    // 构建HTML
     let html = `<!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
         <title>${productName}配置清单</title>
         <style>
-            body {
-                font-family: '微软雅黑', 'Microsoft YaHei', sans-serif;
-                margin: 20px;
-            }
-            table {
-                border-collapse: collapse;
-                width: 100%;
-                margin-top: 10px;
-            }
-            th, td {
-                border: 1px solid #ccc;
-                padding: 8px 12px;
-                text-align: center;
-                vertical-align: middle;
-                font-family: '微软雅黑', 'Microsoft YaHei', sans-serif;
-                font-size: 12px;
-            }
-            .title {
-                font-size: 16px;
-                font-weight: bold;
-                text-align: center;
-                background-color: #f2f2f2;
-            }
-            .header-row {
-                background-color: #e6f0ff;
-                font-weight: bold;
-            }
-            .total-row {
-                background-color: #f9f9f9;
-                font-weight: bold;
-            }
+            body { font-family: '微软雅黑', 'Microsoft YaHei', sans-serif; margin: 20px; }
+            table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+            th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; vertical-align: middle; font-family: '微软雅黑'; font-size: 12px; }
+            .title { font-size: 16px; font-weight: bold; text-align: center; background-color: #f2f2f2; }
+            .header-row { background-color: #e6f0ff; font-weight: bold; }
+            .total-row { background-color: #f9f9f9; font-weight: bold; }
         </style>
     </head>
     <body>
         <table>
-            <!-- 第1行：标题（合并7列） -->
-            <tr class="title">
-                <td colspan="7">${productName}配置清单</td>
-            </tr>
-            <!-- 第2行：列头 -->
+            <tr class="title"><td colspan="7">${productName}配置清单</td></tr>
             <tr class="header-row">
-                <th>序号</th>
-                <th>型号</th>
-                <th>名称</th>
-                <th>规格参数</th>
-                <th>类型</th>
-                <th>数量</th>
-                <th>价格</th>
+                <th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>类型</th><th>数量</th><th>价格</th>
             </tr>`;
 
-    // 数据行
-    allItems.forEach((item, idx) => {
+    nonZeroItems.forEach((item, idx) => {
         html += `
             <tr>
                 <td>${idx + 1}</td>
