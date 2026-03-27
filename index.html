@@ -293,7 +293,7 @@
     }
 
     // 导出Excel
-    document.getElementById('exportBtn').addEventListener('click', () => {
+   document.getElementById('exportBtn').addEventListener('click', () => {
     if (!currentConfigItems.length) {
         alert('请先选择产品');
         return;
@@ -305,6 +305,15 @@
     const standard = currentConfigItems.filter(i => i.类型 === '标配');
     const optional = currentConfigItems.filter(i => i.类型 === '选配');
     const allItems = [...standard, ...optional];
+
+    // 计算数量和价格合计（价格暂时为0，后续可手动填）
+    let totalQty = 0;
+    let totalPrice = 0;
+    allItems.forEach(item => {
+        totalQty += item.当前数量;
+        // 如果价格列有值（比如从item.price读取），但这里没有存储价格，故合计为0
+        // 若未来增加价格字段，可在此累加
+    });
 
     // 构建HTML内容
     let html = `<!DOCTYPE html>
@@ -340,13 +349,17 @@
                 background-color: #e6f0ff;
                 font-weight: bold;
             }
+            .total-row {
+                background-color: #f9f9f9;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
         <table>
             <!-- 第1行：标题（合并7列） -->
-            <tr>
-                <td colspan="7" class="title">${productName}配置清单</td>
+            <tr class="title">
+                <td colspan="7">${productName}配置清单</td>
             </tr>
             <!-- 第2行：列头 -->
             <tr class="header-row">
@@ -369,11 +382,17 @@
                 <td>${escapeHtml(item.规格参数)}</td>
                 <td>${item.类型}</td>
                 <td>${item.当前数量}</td>
-                <td></td>  <!-- 价格列留空 -->
+                <td></td>
             </tr>`;
     });
 
+    // 合计行
     html += `
+            <tr class="total-row">
+                <td colspan="5" style="text-align:right;"><strong>合计</strong></td>
+                <td><strong>${totalQty}</strong></td>
+                <td><strong>${totalPrice}</strong></td>
+            </tr>
         </table>
         <p style="font-size:10px; color:#666; margin-top:20px;">导出时间：${new Date().toLocaleString()}</p>
     </body>
@@ -401,13 +420,6 @@ function escapeHtml(str) {
         return m;
     });
 }
-
-        // 创建工作簿并导出
-        const ws = XLSX.utils.aoa_to_sheet(rows);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, '产品配置');
-        XLSX.writeFile(wb, `${currentProductCode}_配置清单.xlsx`);
-    });
 
     // 简单的HTML转义
     function escapeHtml(str) {
