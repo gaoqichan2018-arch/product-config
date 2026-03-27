@@ -258,7 +258,14 @@
         return;
     }
 
-    // 从页面读取所有输入框的最新数量
+    // 1. 获取当前产品的基础配置（来自API的原始数据，包含配件ID、类型等）
+    const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
+    if (productConfigs.length === 0) {
+        alert('产品配置信息缺失，请联系管理员');
+        return;
+    }
+
+    // 2. 获取页面上所有数量输入框的当前值
     const inputs = document.querySelectorAll('.qty-input');
     const qtyMap = new Map();
     inputs.forEach(input => {
@@ -267,35 +274,41 @@
         qtyMap.set(partId, qty);
     });
 
-    // 构建包含最新数量的配置项数组
+    // 3. 构建完整配置项（关联配件详细信息）
     const allItems = [];
-    for (let item of currentConfigItems) {
-        const newQty = qtyMap.get(item.配件ID);
-        if (newQty !== undefined) {
-            item.当前数量 = newQty;
-        }
-        allItems.push(item);
+    for (let cfg of productConfigs) {
+        const part = partsMap[cfg.配件ID];
+        if (!part) continue;
+        const currentQty = qtyMap.get(cfg.配件ID) ?? (cfg.类型 === '标配' ? 1 : 0);
+        allItems.push({
+            配件ID: cfg.配件ID,
+            型号: part.型号,
+            名称: part.名称,
+            规格参数: part.规格参数 || '',
+            类型: cfg.类型,
+            当前数量: currentQty
+        });
     }
 
-    // 过滤出数量大于0的项
+    // 4. 过滤数量大于0的项
     const nonZeroItems = allItems.filter(item => item.当前数量 > 0);
     if (nonZeroItems.length === 0) {
         alert('没有需要导出的项目（所有数量均为0）');
         return;
     }
 
-    // 按类型排序：标配在前，选配在后
+    // 5. 按类型排序：标配在前，选配在后
     nonZeroItems.sort((a, b) => {
         if (a.类型 === '标配' && b.类型 === '选配') return -1;
         if (a.类型 === '选配' && b.类型 === '标配') return 1;
         return 0;
     });
 
-    // 获取产品名称
+    // 6. 获取产品名称
     const product = products.find(p => p.产品代码 === currentProductCode);
     const productName = product ? product.产品名称 : currentProductCode;
 
-    // 计算合计数量和价格（价格暂为0）
+    // 7. 计算合计数量和价格（价格暂为0）
     let totalQty = 0;
     let totalPrice = 0;
     nonZeroItems.forEach(item => {
@@ -303,7 +316,7 @@
         // 价格合计暂不实现
     });
 
-    // 生成HTML表格（用于导出Excel）
+    // 8. 生成HTML表格（用于导出Excel）
     let html = `<!DOCTYPE html>
     <html>
     <head>
