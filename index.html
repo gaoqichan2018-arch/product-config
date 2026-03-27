@@ -258,23 +258,32 @@
         return;
     }
 
-    // 1. 获取当前产品的基础配置（来自API的原始数据，包含配件ID、类型等）
-    const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
-    if (productConfigs.length === 0) {
-        alert('产品配置信息缺失，请联系管理员');
+    // 从页面读取所有输入框的当前值
+    const inputs = document.querySelectorAll('.qty-input');
+    if (inputs.length === 0) {
+        alert('未找到数量输入框，请刷新页面重试');
         return;
     }
 
-    // 2. 获取页面上所有数量输入框的当前值
-    const inputs = document.querySelectorAll('.qty-input');
     const qtyMap = new Map();
     inputs.forEach(input => {
         const partId = input.dataset.id;
+        if (!partId) {
+            console.warn('输入框缺少 data-id 属性', input);
+            return;
+        }
         const qty = parseInt(input.value) || 0;
         qtyMap.set(partId, qty);
     });
 
-    // 3. 构建完整配置项（关联配件详细信息）
+    // 获取基础配置（从API数据）
+    const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
+    if (productConfigs.length === 0) {
+        alert('产品配置信息缺失');
+        return;
+    }
+
+    // 构建完整配置项，并应用最新数量
     const allItems = [];
     for (let cfg of productConfigs) {
         const part = partsMap[cfg.配件ID];
@@ -290,80 +299,72 @@
         });
     }
 
-    // 4. 过滤数量大于0的项
+    // 过滤数量大于0的项
     const nonZeroItems = allItems.filter(item => item.当前数量 > 0);
     if (nonZeroItems.length === 0) {
         alert('没有需要导出的项目（所有数量均为0）');
         return;
     }
 
-    // 5. 按类型排序：标配在前，选配在后
+    // 排序：标配在上
     nonZeroItems.sort((a, b) => {
         if (a.类型 === '标配' && b.类型 === '选配') return -1;
         if (a.类型 === '选配' && b.类型 === '标配') return 1;
         return 0;
     });
 
-    // 6. 获取产品名称
+    // 获取产品名称
     const product = products.find(p => p.产品代码 === currentProductCode);
     const productName = product ? product.产品名称 : currentProductCode;
 
-    // 7. 计算合计数量和价格（价格暂为0）
+    // 计算合计
     let totalQty = 0;
-    let totalPrice = 0;
-    nonZeroItems.forEach(item => {
-        totalQty += item.当前数量;
-        // 价格合计暂不实现
-    });
+    nonZeroItems.forEach(item => totalQty += item.当前数量);
 
-    // 8. 生成HTML表格（用于导出Excel）
+    // 生成HTML
     let html = `<!DOCTYPE html>
     <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>${productName}配置清单</title>
-        <style>
-            body { font-family: '微软雅黑', 'Microsoft YaHei', sans-serif; margin: 20px; }
-            table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-            th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; vertical-align: middle; font-family: '微软雅黑'; font-size: 12px; }
-            .title { font-size: 16px; font-weight: bold; text-align: center; background-color: #f2f2f2; }
-            .header-row { background-color: #e6f0ff; font-weight: bold; }
-            .total-row { background-color: #f9f9f9; font-weight: bold; }
-        </style>
+    <head><meta charset="UTF-8"><title>${productName}配置清单</title>
+    <style>
+        body { font-family: '微软雅黑', 'Microsoft YaHei', sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+        th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; vertical-align: middle; font-size: 12px; }
+        .title { font-size: 16px; font-weight: bold; text-align: center; background-color: #f2f2f2; }
+        .header-row { background-color: #e6f0ff; font-weight: bold; }
+        .total-row { background-color: #f9f9f9; font-weight: bold; }
+    </style>
     </head>
     <body>
-        <table>
-            <tr class="title"><td colspan="7">${productName}配置清单</td></tr>
-            <tr class="header-row">
-                <th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>类型</th><th>数量</th><th>价格</th>
-            </tr>`;
+    <table>
+        <tr class="title"><td colspan="7">${productName}配置清单</td></tr>
+        <tr class="header-row">
+            <th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>类型</th><th>数量</th><th>价格</th>
+        </tr>`;
 
     nonZeroItems.forEach((item, idx) => {
         html += `
-            <tr>
-                <td>${idx + 1}</td>
-                <td>${escapeHtml(item.型号)}</td>
-                <td>${escapeHtml(item.名称)}</td>
-                <td>${escapeHtml(item.规格参数)}</td>
-                <td>${item.类型}</td>
-                <td>${item.当前数量}</td>
-                <td></td>
-            </tr>`;
+        <tr>
+            <td>${idx+1}</td>
+            <td>${escapeHtml(item.型号)}</td>
+            <td>${escapeHtml(item.名称)}</td>
+            <td>${escapeHtml(item.规格参数)}</td>
+            <td>${item.类型}</td>
+            <td>${item.当前数量}</td>
+            <td></td>
+        </tr>`;
     });
 
-    // 合计行
     html += `
-            <tr class="total-row">
-                <td colspan="5" style="text-align:right;"><strong>合计</strong></td>
-                <td><strong>${totalQty}</strong></td>
-                <td><strong>${totalPrice}</strong></td>
-            </tr>
-        </table>
-        <p style="font-size:10px; color:#666; margin-top:20px;">导出时间：${new Date().toLocaleString()}</p>
+        <tr class="total-row">
+            <td colspan="5" style="text-align:right;"><strong>合计</strong></td>
+            <td><strong>${totalQty}</strong></td>
+            <td><strong>0</strong></td>
+        </tr>
+    </table>
+    <p style="font-size:10px; color:#666;">导出时间：${new Date().toLocaleString()}</p>
     </body>
     </html>`;
 
-    // 保存为.xls文件
     const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
