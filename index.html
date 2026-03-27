@@ -294,34 +294,113 @@
 
     // 导出Excel
     document.getElementById('exportBtn').addEventListener('click', () => {
-        if (!currentConfigItems.length) {
-            alert('请先选择产品');
-            return;
-        }
-        const product = products.find(p => p.产品代码 === currentProductCode);
-        const productName = product ? product.产品名称 : currentProductCode;
+    if (!currentConfigItems.length) {
+        alert('请先选择产品');
+        return;
+    }
+    const product = products.find(p => p.产品代码 === currentProductCode);
+    const productName = product ? product.产品名称 : currentProductCode;
 
-        // 构建导出数据
-        const rows = [];
-        rows.push(['产品代码', currentProductCode]);
-        rows.push(['产品名称', productName]);
-        rows.push(['导出时间', new Date().toLocaleString()]);
-        rows.push([]);
-        rows.push(['类型', '序号', '型号', '名称', '规格参数', '数量']);
+    // 分离标配和选配（用于显示）
+    const standard = currentConfigItems.filter(i => i.类型 === '标配');
+    const optional = currentConfigItems.filter(i => i.类型 === '选配');
+    const allItems = [...standard, ...optional];
 
-        let stdIdx = 0, optIdx = 0;
-        currentConfigItems.forEach(item => {
-            const typeLabel = item.类型 === '标配' ? '标配' : '选配';
-            const idx = item.类型 === '标配' ? ++stdIdx : ++optIdx;
-            rows.push([
-                typeLabel,
-                idx,
-                item.型号,
-                item.名称,
-                item.规格参数,
-                item.当前数量
-            ]);
-        });
+    // 构建HTML内容
+    let html = `<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>${productName}配置清单</title>
+        <style>
+            body {
+                font-family: '微软雅黑', 'Microsoft YaHei', sans-serif;
+                margin: 20px;
+            }
+            table {
+                border-collapse: collapse;
+                width: 100%;
+                margin-top: 10px;
+            }
+            th, td {
+                border: 1px solid #ccc;
+                padding: 8px 12px;
+                text-align: center;
+                vertical-align: middle;
+                font-family: '微软雅黑', 'Microsoft YaHei', sans-serif;
+                font-size: 12px;
+            }
+            .title {
+                font-size: 16px;
+                font-weight: bold;
+                text-align: center;
+                background-color: #f2f2f2;
+            }
+            .header-row {
+                background-color: #e6f0ff;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <table>
+            <!-- 第1行：标题（合并7列） -->
+            <tr>
+                <td colspan="7" class="title">${productName}配置清单</td>
+            </tr>
+            <!-- 第2行：列头 -->
+            <tr class="header-row">
+                <th>序号</th>
+                <th>型号</th>
+                <th>名称</th>
+                <th>规格参数</th>
+                <th>类型</th>
+                <th>数量</th>
+                <th>价格</th>
+            </tr>`;
+
+    // 数据行
+    allItems.forEach((item, idx) => {
+        html += `
+            <tr>
+                <td>${idx + 1}</td>
+                <td>${escapeHtml(item.型号)}</td>
+                <td>${escapeHtml(item.名称)}</td>
+                <td>${escapeHtml(item.规格参数)}</td>
+                <td>${item.类型}</td>
+                <td>${item.当前数量}</td>
+                <td></td>  <!-- 价格列留空 -->
+            </tr>`;
+    });
+
+    html += `
+        </table>
+        <p style="font-size:10px; color:#666; margin-top:20px;">导出时间：${new Date().toLocaleString()}</p>
+    </body>
+    </html>`;
+
+    // 保存为.xls文件
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `${currentProductCode}_配置清单.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+});
+
+// 辅助函数：防止HTML注入
+function escapeHtml(str) {
+    if (!str) return '';
+    return str.replace(/[&<>]/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        return m;
+    });
+}
 
         // 创建工作簿并导出
         const ws = XLSX.utils.aoa_to_sheet(rows);
