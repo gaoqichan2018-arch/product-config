@@ -258,7 +258,7 @@
         return;
     }
 
-    // 从页面读取所有输入框的当前值
+    // 1. 从页面读取所有数量输入框的当前值
     const inputs = document.querySelectorAll('.qty-input');
     if (inputs.length === 0) {
         alert('未找到数量输入框，请刷新页面重试');
@@ -276,14 +276,14 @@
         qtyMap.set(partId, qty);
     });
 
-    // 获取基础配置（从API数据）
+    // 2. 获取该产品的基础配置（从API数据）
     const productConfigs = configs.filter(c => c.产品代码 === currentProductCode);
     if (productConfigs.length === 0) {
         alert('产品配置信息缺失');
         return;
     }
 
-    // 构建完整配置项，并应用最新数量
+    // 3. 构建最终配置项（关联配件详细信息）
     const allItems = [];
     for (let cfg of productConfigs) {
         const part = partsMap[cfg.配件ID];
@@ -299,43 +299,45 @@
         });
     }
 
-    // 过滤数量大于0的项
+    // 4. 过滤数量大于0的项
     const nonZeroItems = allItems.filter(item => item.当前数量 > 0);
     if (nonZeroItems.length === 0) {
         alert('没有需要导出的项目（所有数量均为0）');
         return;
     }
 
-    // 排序：标配在上
+    // 5. 排序：标配在前，选配在后
     nonZeroItems.sort((a, b) => {
         if (a.类型 === '标配' && b.类型 === '选配') return -1;
         if (a.类型 === '选配' && b.类型 === '标配') return 1;
         return 0;
     });
 
-    // 获取产品名称
+    // 6. 获取产品名称
     const product = products.find(p => p.产品代码 === currentProductCode);
     const productName = product ? product.产品名称 : currentProductCode;
 
-    // 计算合计
+    // 7. 计算合计
     let totalQty = 0;
     nonZeroItems.forEach(item => totalQty += item.当前数量);
 
-    // 生成HTML
+    // 8. 生成 HTML 表格（用于导出 Excel）
     let html = `<!DOCTYPE html>
     <html>
-    <head><meta charset="UTF-8"><title>${productName}配置清单</title>
-    <style>
-        body { font-family: '微软雅黑', 'Microsoft YaHei', sans-serif; margin: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-        th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; vertical-align: middle; font-size: 12px; }
-        .title { font-size: 16px; font-weight: bold; text-align: center; background-color: #f2f2f2; }
-        .header-row { background-color: #e6f0ff; font-weight: bold; }
-        .total-row { background-color: #f9f9f9; font-weight: bold; }
-    </style>
+    <head>
+        <meta charset="UTF-8">
+        <title>${productName}配置清单</title>
+        <style>
+            body { font-family: '微软雅黑', 'Microsoft YaHei', sans-serif; margin: 20px; }
+            table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+            th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: center; vertical-align: middle; font-size: 12px; }
+            .title { font-size: 16px; font-weight: bold; text-align: center; background-color: #f2f2f2; }
+            .header-row { background-color: #e6f0ff; font-weight: bold; }
+            .total-row { background-color: #f9f9f9; font-weight: bold; }
+        </style>
     </head>
     <body>
-    <table>
+     <table>
         <tr class="title"><td colspan="7">${productName}配置清单</td></tr>
         <tr class="header-row">
             <th>序号</th><th>型号</th><th>名称</th><th>规格参数</th><th>类型</th><th>数量</th><th>价格</th>
@@ -360,11 +362,12 @@
             <td><strong>${totalQty}</strong></td>
             <td><strong>0</strong></td>
         </tr>
-    </table>
-    <p style="font-size:10px; color:#666;">导出时间：${new Date().toLocaleString()}</p>
+     </table>
+     <p style="font-size:10px; color:#666;">导出时间：${new Date().toLocaleString()}</p>
     </body>
     </html>`;
 
+    // 保存为 .xls 文件
     const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
