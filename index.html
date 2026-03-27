@@ -211,7 +211,6 @@
     for (let cfg of productConfigs) {
         const part = partsMap[cfg.配件ID];
         if (!part) continue;
-        // 标配默认数量1，选配默认数量0
         let defaultQty = cfg.类型 === '标配' ? 1 : 0;
         items.push({
             配件ID: cfg.配件ID,
@@ -219,12 +218,11 @@
             名称: part.名称,
             规格参数: part.规格参数 || '',
             类型: cfg.类型,
-            默认数量: defaultQty,
             当前数量: defaultQty
         });
     }
 
-    // 生成表格（全部显示可调数量）
+    // 生成表格，全部显示可调数量
     let html = `
         <h3>配置清单（可修改数量）</h3>
         <table class="config-table" id="configTable">
@@ -236,7 +234,7 @@
     items.forEach((item, idx) => {
         html += `
             <tr data-part-id="${item.配件ID}">
-                <td>${idx+1}</td>
+                <td>${idx+1} </td>
                 <td>${escapeHtml(item.型号)}</td>
                 <td>${escapeHtml(item.名称)}</td>
                 <td>${escapeHtml(item.规格参数)}</td>
@@ -248,45 +246,64 @@
     html += `</tbody></table>`;
     document.getElementById('configArea').innerHTML = html;
 
-    // 绑定数量变化事件
-    const inputs = document.querySelectorAll('.qty-input');
-    inputs.forEach(input => {
-        input.addEventListener('change', (e) => {
-            const partId = e.target.dataset.id;
-            const newQty = parseInt(e.target.value) || 0;
-            const item = items.find(i => i.配件ID === partId);
-            if (item) item.当前数量 = newQty;
-        });
-    });
-
-    currentConfigItems = items;  // 保存所有项（包括数量为0的）
+    // 保存当前配置项引用（无需额外绑定，导出时会实时读取DOM）
+    // 但为了方便，可以保留一个数组
+    currentConfigItems = items;
 }
 
     // 导出Excel
    document.getElementById('exportBtn').addEventListener('click', () => {
-    if (!currentConfigItems.length) {
+    if (!currentProductCode) {
         alert('请先选择产品');
         return;
     }
-    const product = products.find(p => p.产品代码 === currentProductCode);
-    const productName = product ? product.产品名称 : currentProductCode;
+
+    // 从页面读取所有输入框的最新数量
+    const inputs = document.querySelectorAll('.qty-input');
+    const qtyMap = new Map();
+    inputs.forEach(input => {
+        const partId = input.dataset.id;
+        const qty = parseInt(input.value) || 0;
+        qtyMap.set(partId, qty);
+    });
+
+    // 构建包含最新数量的配置项数组
+    const allItems = [];
+    for (let item of currentConfigItems) {
+        const newQty = qtyMap.get(item.配件ID);
+        if (newQty !== undefined) {
+            item.当前数量 = newQty;
+        }
+        allItems.push(item);
+    }
 
     // 过滤出数量大于0的项
-    const nonZeroItems = currentConfigItems.filter(item => item.当前数量 > 0);
+    const nonZeroItems = allItems.filter(item => item.当前数量 > 0);
     if (nonZeroItems.length === 0) {
         alert('没有需要导出的项目（所有数量均为0）');
         return;
     }
 
-    // 计算合计数量和价格（价格暂为0，可后续扩展）
+    // 按类型排序：标配在前，选配在后
+    nonZeroItems.sort((a, b) => {
+        if (a.类型 === '标配' && b.类型 === '选配') return -1;
+        if (a.类型 === '选配' && b.类型 === '标配') return 1;
+        return 0;
+    });
+
+    // 获取产品名称
+    const product = products.find(p => p.产品代码 === currentProductCode);
+    const productName = product ? product.产品名称 : currentProductCode;
+
+    // 计算合计数量和价格（价格暂为0）
     let totalQty = 0;
     let totalPrice = 0;
     nonZeroItems.forEach(item => {
         totalQty += item.当前数量;
-        // 价格暂时不累加，如需增加价格字段，可在此处读取 item.价格（需先在配件库中定义）
+        // 价格合计暂不实现
     });
 
-    // 构建HTML
+    // 生成HTML表格（用于导出Excel）
     let html = `<!DOCTYPE html>
     <html>
     <head>
